@@ -1,396 +1,278 @@
-// Get cart from localStorage
+// Get cart
 let cart = JSON.parse(localStorage.getItem('cart')) || [];
 
-// DOM Elements
+// DOM
 const orderItems = document.getElementById('orderItems');
 const checkoutForm = document.getElementById('checkoutForm');
 const confirmationModal = document.getElementById('confirmationModal');
 const placeOrderBtn = document.getElementById('placeOrderBtn');
 
-// Your Web3Forms API key and your email here:
-const WEB3FORM_API_KEY = 'c7673b83-f7b4-4021-be36-f3344908c378';  // Replace with your actual passkey
-const YOUR_EMAIL = 'sushan8462@gmail.com';   // Replace with your email
-
-// Initialize checkout page
-document.addEventListener('DOMContentLoaded', function() {
+document.addEventListener("DOMContentLoaded", () => {
     if (cart.length === 0) {
-        redirectToEmptyCart();
+        orderItems.innerHTML = "<p>Your cart is empty</p>";
+        placeOrderBtn.disabled = true;
         return;
     }
-    
     renderOrderSummary();
-    setupFormValidation();
-    setupFormFormatting();
 });
 
-// Redirect if cart is empty
-function redirectToEmptyCart() {
-    document.querySelector('.checkout-content').innerHTML = `
-        <div class="empty-cart-redirect">
-            <i class="fas fa-shopping-cart"></i>
-            <h2>Your cart is empty</h2>
-            <p>Add some delicious items before proceeding to checkout</p>
-            <a href="index.html" class="shop-now-btn">
-                <i class="fas fa-utensils"></i>
-                Shop Now
-            </a>
-        </div>
-    `;
-}
-
-// Render order summary
 function renderOrderSummary() {
-    const subtotal = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+    const subtotal = cart.reduce((s, i) => s + (i.price * i.quantity), 0);
     const delivery = 200;
     const total = subtotal + delivery;
-    
-    // Render order items
-    orderItems.innerHTML = cart.map(item => `
-        <div class="order-item">
-            <img src="${item.image}" alt="${item.name}">
-            <div class="order-item-info">
-                <div class="order-item-name">${item.name}</div>
-                <div class="order-item-details">Qty: ${item.quantity} × ₹${item.price.toFixed(2)}</div>
-            </div>
-            <div class="order-item-price">₹${(item.price * item.quantity).toFixed(2)}</div>
-        </div>
-    `).join('');
-    
-    // Update totals
-    document.getElementById('checkoutSubtotal').textContent = `₹${subtotal.toFixed(2)}`;
-    document.getElementById('checkoutDelivery').textContent = `₹${delivery.toFixed(2)}`;
-    document.getElementById('checkoutTotal').textContent = `₹${total.toFixed(2)}`;
+
+    orderItems.innerHTML = cart.map(i => `
+        <div>${i.name} (x${i.quantity}) - ₹${(i.price * i.quantity).toFixed(2)}</div>
+    `).join("");
+
+    document.getElementById("checkoutSubtotal").textContent = `₹${subtotal.toFixed(2)}`;
+    document.getElementById("checkoutDelivery").textContent = `₹${delivery.toFixed(2)}`;
+    document.getElementById("checkoutTotal").textContent = `₹${total.toFixed(2)}`;
 }
 
-// Setup form validation
-function setupFormValidation() {
-    const form = document.getElementById('checkoutForm');
-    const inputs = form.querySelectorAll('input, select');
+// Generate PDF and auto-download
+function generatePDFInvoice(orderData) {
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF();
+
+    // Header
+    doc.setFontSize(20);
+    doc.setFont("helvetica", "bold");
+    doc.text("MA CRACKERS", 105, 30, { align: "center" });
     
-    // Add real-time validation
-    inputs.forEach(input => {
-        input.addEventListener('blur', function() {
-            validateField(this);
-        });
-        
-        input.addEventListener('input', function() {
-            clearFieldError(this);
-        });
+    doc.setFontSize(12);
+    doc.setFont("helvetica", "normal");
+    doc.text("Fireworks Wholesale & Retail Sales", 105, 40, { align: "center" });
+    doc.text("Website: https://sulya-fireworks.vercel.app/ E-Mail: macrackers@gmail.com", 105, 50, { align: "center" });
+    
+    // Mobile numbers (top right)
+    doc.text("Mob No: 77609 48462", 150, 20);
+    doc.text("94497 98462", 150, 30);
+
+    // Invoice details
+    doc.text(`Date: ${orderData.date}`, 150, 70);
+    doc.text(`Invoice No: ${orderData.orderNumber}`, 20, 80);
+
+    // Customer details
+    doc.setFont("helvetica", "bold");
+    doc.text("BILL TO:", 20, 100);
+    doc.setFont("helvetica", "normal");
+    doc.text(`${orderData.customerName}`, 20, 110);
+    doc.text(`${orderData.address}`, 20, 120);
+    doc.text(`Phone: ${orderData.phone}`, 20, 130);
+    doc.text(`Email: ${orderData.email}`, 20, 140);
+
+    // Table header
+    doc.setFont("helvetica", "bold");
+    doc.rect(20, 160, 170, 10);
+    doc.text("S.No", 25, 167);
+    doc.text("PRODUCT", 60, 167);
+    doc.text("QTY", 110, 167);
+    doc.text("PRICE", 130, 167);
+    doc.text("AMOUNT", 160, 167);
+
+    // Table rows
+    doc.setFont("helvetica", "normal");
+    let yPos = 180;
+    orderData.items.forEach((item, index) => {
+        doc.rect(20, yPos - 10, 170, 10);
+        doc.text((index + 1).toString(), 25, yPos - 3);
+        doc.text(item.name.substring(0, 25), 25, yPos - 3);
+        doc.text(item.quantity.toString(), 115, yPos - 3);
+        doc.text(`Rs.${item.price.toFixed(2)}`, 135, yPos - 3);
+        doc.text(`Rs.${(item.price * item.quantity).toFixed(2)}`, 165, yPos - 3);
+        yPos += 10;
     });
+
+    // Totals
+    yPos += 10;
+    doc.text(`Subtotal: Rs.${orderData.subtotal.toFixed(2)}`, 130, yPos);
+    doc.text(`Delivery: Rs.${orderData.delivery.toFixed(2)}`, 130, yPos + 10);
+    doc.setFont("helvetica", "bold");
+    doc.text(`TOTAL: Rs.${orderData.total.toFixed(2)}`, 130, yPos + 20);
+
+    // Footer
+    doc.setFont("helvetica", "normal");
+    doc.text("Payment Method: UPI/QR", 20, yPos + 40);
+    doc.text("Order Status: Confirmed", 20, yPos + 50);
     
-    // Handle form submission
-    form.addEventListener('submit', function(e) {
-        e.preventDefault();
-        
-        if (validateForm()) {
-            processOrder();
-        }
-    });
+    doc.setFont("helvetica", "bold");
+    doc.text("THANK YOU FOR MA CRACKERS!", 105, yPos + 70, { align: "center" });
+
+    // Download PDF
+    doc.save(`MA-CRACKERS-Invoice-${orderData.orderNumber}.pdf`);
 }
 
-// Validate individual field
-function validateField(field) {
-    const value = field.value.trim();
-    let isValid = true;
-    let errorMessage = '';
+checkoutForm.addEventListener("submit", async function(e) {
+    e.preventDefault();
     
-    // Remove existing error
-    clearFieldError(field);
-    
-    // Check if required field is empty
-    if (field.required && !value) {
-        isValid = false;
-        errorMessage = 'This field is required';
-    }
-    
-    // Specific validations
-    switch (field.name) {
-        case 'email':
-            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-            if (value && !emailRegex.test(value)) {
-                isValid = false;
-                errorMessage = 'Please enter a valid email address';
-            }
-            break;
-            
-        case 'phone':
-            const phoneRegex = /^\(?([0-9]{3})\)?[-. ]?([0-9]{3})[-. ]?([0-9]{4})$/;
-            if (value && !phoneRegex.test(value)) {
-                isValid = false;
-                errorMessage = 'Please enter a valid phone number';
-            }
-            break;
-            
-        case 'pin':
-            const pinRegex = /^\d{6}$/;
-            if (value && !pinRegex.test(value)) {
-                isValid = false;
-                errorMessage = 'Please enter a valid 6-digit PIN code';
-            }
-            break;
-            
-        case 'cardNumber':
-            if (value && value.replace(/\s/g, '').length !== 16) {
-                isValid = false;
-                errorMessage = 'Please enter a valid 16-digit card number';
-            }
-            break;
-            
-        case 'expiry':
-            const expiryRegex = /^(0[1-9]|1[0-2])\/\d{2}$/;
-            if (value && !expiryRegex.test(value)) {
-                isValid = false;
-                errorMessage = 'Please enter expiry in MM/YY format';
-            }
-            break;
-            
-        case 'cvv':
-            const cvvRegex = /^\d{3,4}$/;
-            if (value && !cvvRegex.test(value)) {
-                isValid = false;
-                errorMessage = 'Please enter a valid CVV';
-            }
-            break;
-    }
-    
-    if (!isValid) {
-        showFieldError(field, errorMessage);
-    } else {
-        field.classList.add('success');
-    }
-    
-    return isValid;
-}
-
-// Show field error
-function showFieldError(field, message) {
-    field.classList.add('error');
-    field.classList.remove('success');
-    
-    // Remove existing error message
-    const existingError = field.parentNode.querySelector('.error-message');
-    if (existingError) {
-        existingError.remove();
-    }
-    
-    // Add error message
-    const errorDiv = document.createElement('div');
-    errorDiv.className = 'error-message';
-    errorDiv.textContent = message;
-    field.parentNode.appendChild(errorDiv);
-}
-
-// Clear field error
-function clearFieldError(field) {
-    field.classList.remove('error');
-    const errorMessage = field.parentNode.querySelector('.error-message');
-    if (errorMessage) {
-        errorMessage.remove();
-    }
-}
-
-// Validate entire form
-function validateForm() {
-    const form = document.getElementById('checkoutForm');
-    const inputs = form.querySelectorAll('input, select');
-    let isFormValid = true;
-    
-    inputs.forEach(input => {
-        if (!validateField(input)) {
-            isFormValid = false;
-        }
-    });
-    
-    return isFormValid;
-}
-
-// Setup form formatting
-function setupFormFormatting() {
-    // Format card number
-    const cardNumberInput = document.getElementById('cardNumber');
-    if(cardNumberInput) {
-        cardNumberInput.addEventListener('input', function(e) {
-            let value = e.target.value.replace(/\s/g, '').replace(/[^0-9]/gi, '');
-            let formattedValue = value.match(/.{1,4}/g)?.join(' ') || value;
-            e.target.value = formattedValue.substring(0, 19);
-        });
-    }
-    
-    // Format expiry date
-    const expiryInput = document.getElementById('expiry');
-    if(expiryInput) {
-        expiryInput.addEventListener('input', function(e) {
-            let value = e.target.value.replace(/\D/g, '');
-            if (value.length >= 2) {
-                value = value.substring(0, 2) + '/' + value.substring(2, 4);
-            }
-            e.target.value = value;
-        });
-    }
-    
-    // Format CVV
-    const cvvInput = document.getElementById('cvv');
-    if(cvvInput) {
-        cvvInput.addEventListener('input', function(e) {
-            e.target.value = e.target.value.replace(/[^0-9]/g, '').substring(0, 4);
-        });
-    }
-    
-    // Format phone number
-    const phoneInput = document.getElementById('phone');
-    if(phoneInput) {
-        phoneInput.addEventListener('input', function(e) {
-            let value = e.target.value.replace(/\D/g, '');
-            let formattedValue = value.replace(/(\d{3})(\d{3})(\d{4})/, '($1) $2-$3');
-            e.target.value = formattedValue;
-        });
-    }
-}
-
-// Process order
-async function processOrder() {
-    // Show loading state
-    placeOrderBtn.classList.add('loading');
-    placeOrderBtn.textContent = 'Processing...';
     placeOrderBtn.disabled = true;
+    placeOrderBtn.textContent = "Processing...";
 
-    // Prepare data to send
-    const formData = new FormData(checkoutForm);
+    // Get form data
+    const firstName = document.getElementById("firstName").value;
+    const lastName = document.getElementById("lastName").value;
+    const email = document.getElementById("email").value;
+    const phone = document.getElementById("phone").value;
+    const address = document.getElementById("address").value;
+    const city = document.getElementById("city").value;
+    const district = document.getElementById("District").value;
+    const pin = document.getElementById("pin").value;
 
-    // Add cart info + totals to form data
-    const subtotal = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+    const subtotal = cart.reduce((s, i) => s + (i.price * i.quantity), 0);
     const delivery = 200;
     const total = subtotal + delivery;
+    const orderNumber = `MA${Date.now().toString().slice(-5)}`;
+    const invoiceDate = new Date().toLocaleDateString('en-IN');
 
-    const cartSummary = cart.map(item => 
-      `${item.name} (x${item.quantity}) - ₹${(item.price * item.quantity).toFixed(2)}`
+    // Prepare data for PDF
+    const orderData = {
+        orderNumber: orderNumber,
+        date: invoiceDate,
+        customerName: firstName + " " + lastName,
+        phone: phone,
+        email: email,
+        address: `${address}, ${city}, ${district} - ${pin}`,
+        items: cart,
+        subtotal: subtotal,
+        delivery: delivery,
+        total: total
+    };
+
+    // Generate and download PDF
+    generatePDFInvoice(orderData);
+
+    // Create detailed table-style invoice for emails
+    const invoiceTable = cart.map((item, index) => 
+        `${(index + 1).toString().padEnd(4)} ${item.name.padEnd(35)} ${item.quantity.toString().padEnd(5)} Rs.${item.price.toFixed(2).padEnd(10)} Rs.${(item.price * item.quantity).toFixed(2)}`
     ).join('\n');
 
-    const fullSummary = `
-${cartSummary}
-
-Subtotal: ₹${subtotal.toFixed(2)}
-Delivery: ₹${delivery.toFixed(2)}
-Total: ₹${total.toFixed(2)}
-`;
-
-    formData.append('Cart Summary', fullSummary);
-
-    // Add hidden fields required by Web3Forms
-    formData.append('access_key', WEB3FORM_API_KEY);
-    formData.append('subject', 'New Order from Sulya Fireworks');
-    formData.append('reply_to', formData.get('email'));
-    formData.append('redirect', '');  // No redirect; we'll handle UI after success
-
-    // 🔥 Generate unique order number ONCE
-    const orderNumber = `MA${Math.floor(Math.random() * 100000).toString().padStart(5, '0')}`;
-    formData.append('Order Number', orderNumber);
+    const fullAddress = `${address}, ${city}, ${district} - ${pin}`;
 
     try {
-        const response = await fetch('https://api.web3forms.com/submit', {
-            method: 'POST',
-            body: formData,
+        // 1. Send order notification to YOU via Web3Forms
+        const businessFormData = new FormData();
+        businessFormData.append("access_key", "c7673b83-f7b4-4021-be36-f3344908c378");
+        businessFormData.append("subject", `New Order ${orderNumber} - MA CRACKERS`);
+        businessFormData.append("message", `NEW ORDER RECEIVED
+
+ORDER INVOICE - MA CRACKERS
+========================================
+
+Order Number: ${orderNumber}
+Date: ${invoiceDate}
+
+CUSTOMER DETAILS:
+Name: ${firstName} ${lastName}
+Phone: ${phone}
+Email: ${email}
+Address: ${fullAddress}
+
+ITEMS ORDERED:
+========================================
+S.No Product Name                    Qty   Price      Amount
+========================================
+${invoiceTable}
+----------------------------------------
+                        Subtotal: Rs.${subtotal.toFixed(2)}
+                        Delivery: Rs.${delivery.toFixed(2)}
+                        =============================
+                        TOTAL:    Rs.${total.toFixed(2)}
+========================================
+
+Payment: Cash on Delivery
+Status: Order Confirmed
+
+Contact Customer: ${phone}`);
+
+        await fetch("https://api.web3forms.com/submit", {
+            method: "POST",
+            body: businessFormData
         });
 
-        const result = await response.json();
+        // 2. Send COMPLETE INVOICE to CUSTOMER via EmailJS
+        await emailjs.send("service_rblyk6p", "template_g0varae", {
+            to_email: email,
+            to_name: firstName + " " + lastName,
+            order_number: orderNumber,
+            from_name: "MA CRACKERS Team",
+            message: `Dear ${firstName} ${lastName},
 
-        if (result.success) {
-            // ✅ Use the same order number in modal
-            showOrderConfirmation(orderNumber);
+Thank you for your order with MA CRACKERS!
 
-            // Clear cart
-            localStorage.removeItem('cart');
-            cart = [];
+ORDER INVOICE & CONFIRMATION
+================================================
 
-            // Reset button
-            placeOrderBtn.classList.remove('loading');
-            placeOrderBtn.textContent = 'Place Order';
-            placeOrderBtn.disabled = false;
-        } else {
-            alert('Failed to place order. Please try again.');
-            placeOrderBtn.classList.remove('loading');
-            placeOrderBtn.textContent = 'Place Order';
-            placeOrderBtn.disabled = false;
-        }
+                    MA CRACKERS
+            Fireworks Wholesale & Retail Sales
+        Website: https://sulya-fireworks.vercel.app/
+        E-Mail: macrackers@gmail.com
+        Mob: 77609 48462, 94497 98462
+
+================================================
+
+Invoice No: ${orderNumber}
+Date: ${invoiceDate}
+
+BILL TO:
+${firstName} ${lastName}
+${fullAddress}
+Phone: ${phone}
+Email: ${email}
+
+================================================
+ITEMS ORDERED:
+================================================
+S.No Product Name                    Qty   Price      Amount
+================================================
+${invoiceTable}
+------------------------------------------------
+                        Subtotal: Rs.${subtotal.toFixed(2)}
+                        Delivery: Rs.${delivery.toFixed(2)}
+                        ================================
+                        TOTAL:    Rs.${total.toFixed(2)}
+================================================
+
+PAYMENT METHOD: Cash on Delivery
+ORDER STATUS: Confirmed
+
+DELIVERY INFORMATION:
+- We will contact you within 24 hours for delivery confirmation
+- Expected delivery: 1-2 business days
+- Keep this email as your order receipt
+
+PDF Invoice has been downloaded to your device automatically.
+
+For any queries, please contact us or reply to this email.
+
+THANK YOU FOR CHOOSING MA CRACKERS!
+
+Best Regards,
+MA CRACKERS Team
+Contact: macrackers@gmail.com`
+        });
+
+        showOrderConfirmation(orderNumber);
+        localStorage.removeItem("cart");
+        cart = [];
+        
     } catch (error) {
-        alert('Error submitting form. Please check your internet connection and try again.');
-        placeOrderBtn.classList.remove('loading');
-        placeOrderBtn.textContent = 'Place Order';
-        placeOrderBtn.disabled = false;
+        console.error('Error:', error);
+        alert("Order placed and PDF downloaded successfully! We'll contact you directly if there are any email issues.");
+        showOrderConfirmation(orderNumber);
+        localStorage.removeItem("cart");
+        cart = [];
     }
-}
 
-// Show order confirmation
+    placeOrderBtn.disabled = false;
+    placeOrderBtn.textContent = "Place Order";
+});
+
 function showOrderConfirmation(orderNumber) {
-    document.getElementById('orderNumber').textContent = `#${orderNumber}`;
-    confirmationModal.classList.add('active');
-    document.body.style.overflow = 'hidden';
-    
-    // Progress step animation
-    setTimeout(() => {
-        updateProgressStep(2);
-        setTimeout(() => {
-            updateProgressStep(3);
-        }, 500);
-    }, 1000);
+    document.getElementById("orderNumber").textContent = "#" + orderNumber;
+    confirmationModal.classList.add("active");
 }
 
-// Update progress step
-function updateProgressStep(step) {
-    const steps = document.querySelectorAll('.step');
-    steps.forEach((stepEl, index) => {
-        if (index + 1 <= step) {
-            stepEl.classList.add('active');
-        } else {
-            stepEl.classList.remove('active');
-        }
-    });
-}
-
-// Continue shopping from modal
 function continueShoppingFromModal() {
-    window.location.href = 'index.html';
+    window.location.href = "index.html";
 }
-
-// Add demo button in development
-if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
-    const demoBtn = document.createElement('button');
-    demoBtn.textContent = 'Fill Demo Data';
-    demoBtn.style.cssText = `
-        position: fixed;
-        top: 100px;
-        left: 20px;
-        background: #6366f1;
-        color: white;
-        border: none;
-        padding: 0.5rem 1rem;
-        border-radius: 8px;
-        font-size: 0.8rem;
-        cursor: pointer;
-        z-index: 1000;
-    `;
-    demoBtn.onclick = fillDemoData;
-    document.body.appendChild(demoBtn);
-}
-
-// Handle browser back button
-window.addEventListener('popstate', function(e) {
-    if (confirmationModal.classList.contains('active')) {
-        e.preventDefault();
-        window.location.href = 'index.html';
-    }
-});
-
-// Close modal on escape key
-document.addEventListener('keydown', function(e) {
-    if (e.key === 'Escape' && confirmationModal.classList.contains('active')) {
-        continueShoppingFromModal();
-    }
-});
-
-// Prevent form submission on Enter (except on submit button)
-document.addEventListener('keydown', function(e) {
-    if (e.key === 'Enter' && e.target.tagName !== 'BUTTON' && e.target.type !== 'submit') {
-        e.preventDefault();
-    }
-});
